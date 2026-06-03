@@ -6,10 +6,6 @@ briefly sleep to save CPU power during idle periods, instead of busy-polling at
 training data and baselines, the model training code, and a real DPDK
 application used to measure in-loop inference cost.
 
-This was a course project (CS229). The accompanying report contains the full
-methodology, results, and discussion; this README is a brief orientation to the
-code.
-
 ## The problem
 
 A DPDK poll-mode driver reads packets directly from the NIC by continuously
@@ -34,7 +30,7 @@ from simple features of recent traffic.
 ## How the pieces fit together
 
 1. **`traffic_simulator.c`** generates packet arrivals using standard traffic
-   models — Poisson arrivals, a Markov-modulated burst/quiet process (MMPP),
+   models. Poisson arrivals, a Markov-modulated burst/quiet process (MMPP),
    and an optional Pareto heavy-tail mode for self-similar traffic
    (Kleinrock 1975; Fischer & Meier-Hellstern 1993; Leland et al. 1994). It
    runs a polling loop over those arrivals and, at each empty poll, records
@@ -54,16 +50,12 @@ from simple features of recent traffic.
 
 At each empty poll the controller sees five features:
 
-- `empty_run` — consecutive empty polls so far
-- `us_since_pkt` — microseconds since the last packet
-- `rate_fast` / `rate_med` / `rate_slow` — EWMA estimates of packets-per-poll
+- `empty_run`: Consecutive empty polls so far
+- `us_since_pkt`: us since the last packet
+- `rate_fast` / `rate_med` / `rate_slow`: EWMA estimates of packets-per-poll
   at three timescales (alpha = 0.20 / 0.02 / 0.002)
 
-The controller makes a **binary** decision: sleep, or keep polling. (We first
-tried a multi-duration choice over {0, 20, 100, 250} us, but the two longest
-sleeps were not learnable — how deep one is into a quiet period is nearly
-memoryless — so we reduced to a binary decision and re-evaluate after each
-fixed-length sleep. The report discusses this.)
+The controller makes a **binary** decision: sleep, or keep polling.
 
 ## Building and running
 
@@ -92,9 +84,8 @@ sudo ./dpdk_application -l 0-1 \
 
 ## Experiment summary and results
 
-The work proceeded in stages; the report contains the full detail, but briefly:
 
-**Modeling.** We first framed the controller as a four-way choice over sleep
+**Modeling:** First framed the controller as a four-way choice over sleep
 durations {0, 20, 100, 250} microseconds. That model never beat the
 majority-class baseline and gave zero recall to the two longest sleeps,
 regardless of class weighting or added features. The confusion matrix showed
@@ -105,31 +96,25 @@ We therefore reduced the action space to a binary sleep / poll decision. This
 is also architecturally sound: a long idle period is handled as a sequence of
 short, re-evaluated sleeps, making the policy adaptive within an idle period.
 
-**Binary model accuracy.** The depth-6 decision tree reached 0.823 test
+**Binary model accuracy:** The depth-6 decision tree reached 0.823 test
 accuracy (majority-class baseline 0.799) and 0.820 on held-out traffic of a
 different type (self-similar Pareto bursts + diurnal load) that it never
 trained on. A logistic-regression model agreed closely (0.809). The tree relies
 mainly on the medium- and long-horizon arrival-rate features (rate_med,
 rate_slow), i.e. it learned to detect the sustained-traffic-versus-quiet
-regime. The modest margin over the majority baseline reflects the same
-memorylessness: the regime is detectable, but the exact end of a quiet period
-is not.
+regime.
 
-**Power/latency tradeoff (simulator).** Sweeping the baseline's empty-poll
+**Power/latency tradeoff (simulator):** Sweeping the baseline's empty-poll
 threshold traces a Pareto frontier from no sleeping (0% sleep, 0 microsecond
 added p99 latency) up to aggressive sleeping (~65% sleep, ~97 microsecond p99).
 The learned policy occupies an operating point near the aggressive end
-(~86% sleep fraction at comparable tail latency). Its value is not Pareto
-dominance but adaptivity: it reaches a high sleep fraction by detecting the
-regime from features, without a manually tuned threshold, and generalizes
-across traffic types.
+(~86% sleep fraction at comparable tail latency).
 
-**Inference cost (real DPDK).** Running the exported tree inside an unmodified
-DPDK poll loop on a cloud VM, mean inference cost was 16.9 ns per call, versus
+**Inference cost (real DPDK):** Running the exported tree inside an unmodified
+DPDK poll loop on a cloud VM on GCP, mean inference cost was 16.9 ns per call, versus
 11.7 ns for the threshold baseline's single integer comparison. Both are a
 small fraction of a poll (low hundreds of ns), confirming a tree-based
-controller is cheap enough to run inline. (Early windows show higher values
-due to cache warm-up; the figures above are full-run means.)
+controller is cheap enough to run inline.
 
 ## Scope and limitations
 
@@ -139,7 +124,7 @@ due to cache warm-up; the figures above are full-run means.)
   rate through a two-machine (traffic-generator + device-under-test) testbed
   is the natural next step.
 - The DPDK runs here use the `net_pcap` software device, which has no
-  asynchronous producer; they validate the deployment path and measure
+  asynchronous producer. This setup is used to measure
   inference cost, not the power/latency tradeoff (that comes from the
   simulator).
 
@@ -152,4 +137,3 @@ due to cache warm-up; the figures above are full-run means.)
   Ethernet Traffic," *IEEE/ACM Transactions on Networking*, 1994.
 - DPDK Programmer's Guide, "Power Management,"
   https://doc.dpdk.org/guides/prog_guide/power_man.html
-=======
